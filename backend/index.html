@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FCM Topic Notifications</title>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-messaging.js"></script>
+</head>
+<body>
+    <h1>Firebase Cloud Messaging Topic Notifications</h1>
+    <button id="subscribeButton">Subscribe to Topic</button>
+    <button id="unsubscribeButton">Unsubscribe from Topic</button>
+    <div id="notificationArea"></div>
+
+    <script>
+        // Your web app's Firebase configuration
+        const firebaseConfig = {
+  apiKey: "AIzaSyDt0X5idKwYUVqAMtb9Acc52ShZ8e0FCN4",
+  authDomain: "tasmidur-fcm-testing.firebaseapp.com",
+  projectId: "tasmidur-fcm-testing",
+  storageBucket: "tasmidur-fcm-testing.firebasestorage.app",
+  messagingSenderId: "138949322697",
+  appId: "1:138949322697:web:27c70880f9c137f4406a18",
+  measurementId: "G-YHQ9NY6C27"
+};
+
+        // Initialize Firebase
+        const app = firebase.initializeApp(firebaseConfig);
+        const messaging = firebase.messaging();
+
+        // Request permission to send notifications
+        messaging.requestPermission()
+            .then(() => {
+                console.log('Notification permission granted.');
+                return messaging.getToken();
+            })
+            .then((token) => {
+                console.log('FCM Token:', token);
+                // Send this token to your server if needed
+            })
+            .catch((err) => {
+                console.error('Unable to get permission to notify.', err);
+            });
+
+        // Subscribe to a topic
+        document.getElementById('subscribeButton').addEventListener('click', () => {
+            const topic = 'your_topic_name'; // Replace with your topic name
+            subscribeToTopic(topic);
+        });
+
+        // Unsubscribe from a topic
+        document.getElementById('unsubscribeButton').addEventListener('click', () => {
+            const topic = 'your_topic_name'; // Replace with your topic name
+            unsubscribeFromTopic(topic);
+        });
+
+        // Function to subscribe to a topic
+        function subscribeToTopic(topic) {
+            fetch(`https://fcm.googleapis.com/fcm/subscribe?topic=${topic}`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'key=YOUR_SERVER_KEY', // Replace with your server key
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    to: `/topics/${topic}`,
+                    notification: {
+                        title: 'Subscribed!',
+                        body: `You have subscribed to ${topic}`
+                    }
+                })
+            })
+            .then(response => {
+                if (response.ok) {
+                    console.log(`Subscribed to topic: ${topic}`);
+                } else {
+                    console.error('Subscription failed:', response.statusText);
+                }
+            })
+            .catch(error => console.error('Error subscribing to topic:', error));
+        }
+
+        // Function to unsubscribe from a topic
+        function unsubscribeFromTopic(topic) {
+            fetch(`https://fcm.googleapis.com/fcm/unsubscribe?topic=${topic}`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': 'key=YOUR_SERVER_KEY', // Replace with your server key
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    to: `/topics/${topic}`
+                })
+            })
+            .then(response => {
+                if (response.ok) {
+                    console.log(`Unsubscribed from topic: ${topic}`);
+                } else {
+                    console.error('Unsubscription failed:', response.statusText);
+                }
+            })
+            .catch(error => console.error('Error unsubscribing from topic:', error));
+        }
+
+        // Handle incoming messages when the app is in the foreground
+        messaging.onMessage((payload) => {
+            console.log('Message received. ', payload);
+            showNotification(payload.notification.title, payload.notification.body);
+        });
+
+        // Function to display notifications in the UI
+        function showNotification(title, body) {
+            const notificationArea = document.getElementById('notificationArea');
+            const notificationElement = document.createElement('div');
+            notificationElement.textContent = `${title}: ${body}`;
+            notificationArea.appendChild(notificationElement);
+        }
+
+        // Service Worker registration
+        if ('service Worker' in navigator) {
+            navigator.serviceWorker.register('/firebase-messaging-sw.js')
+                .then((registration) => {
+                    console.log('Service Worker registered with scope:', registration.scope);
+                })
+                .catch((err) => {
+                    console.error('Service Worker registration failed:', err);
+                });
+        }
+    </script>
+</body>
+</html>
