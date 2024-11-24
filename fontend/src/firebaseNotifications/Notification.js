@@ -26,6 +26,7 @@ const Notification = () => {
 
   onMessageListener()
     .then((payload) => {
+      console.log('onMessageListener payload: ', payload);
       setNotification({title: payload?.notification?.title, body: payload?.notification?.body});    
       setNotifications([...notifications, payload?.notification]);
     })
