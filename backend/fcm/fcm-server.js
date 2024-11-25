@@ -4,6 +4,7 @@ import bodyParser from 'body-parser'; // Optional: for parsing JSON bodies
 import cors from 'cors';
 import admin from './firebase.config.js';
 import mongoose from 'mongoose';
+import { publishMessage } from './socketClient.js';
 
 
 // Initialize Express
@@ -14,10 +15,7 @@ app.use(bodyParser.json());
 const PORT = process.env.PORT || 3010;
 
 // Connect to MongoDB
-mongoose.connect('mongodb://localhost:27017/fcm-tokens', { // Update with your MongoDB URI
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  }).then(() => {
+mongoose.connect('mongodb://localhost:27017/fcm-tokens').then(() => {
     console.log('MongoDB connected');
   }).catch(err => {
     console.error('MongoDB connection error:', err);
@@ -76,8 +74,12 @@ app.post('/send-notification', async (req, res) => {
         token: tokenDoc.token,
         data:{
           title:title,
+          icon: "https://www.svgrepo.com/show/31480/notification-bell.svg", // Custom icon URL for web
+          url: "http://localhost:3006"
         }
       };
+
+      publishMessage('receive_message',message);
   
       const response = await admin.messaging().send(message);
       console.log('Notification sent successfully:', response);
