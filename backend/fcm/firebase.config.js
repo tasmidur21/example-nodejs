@@ -5,7 +5,9 @@ import serviceAccount from './fcm-secret.json' assert { type: 'json' }; // Use a
 // Initialize the Firebase Admin SDK
 admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
+    databaseURL: "https://tasmidur-fcm-testing-default-rtdb.asia-southeast1.firebasedatabase.app"
 });
 
 // Export the admin instance for use in other modules
 export default admin;
+export const db=admin.database()

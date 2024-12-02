@@ -2,9 +2,8 @@
 import express from 'express';
 import bodyParser from 'body-parser'; // Optional: for parsing JSON bodies
 import cors from 'cors';
-import admin from './firebase.config.js';
+import admin, { db } from './firebase.config.js';
 import mongoose from 'mongoose';
-import { publishMessage } from './socketClient.js';
 
 
 // Initialize Express
@@ -23,11 +22,41 @@ mongoose.connect('mongodb://localhost:27017/fcm-tokens').then(() => {
 
 const tokenSchema = mongoose.Schema({
   userId: { type: String, required: true, unique: true },
+  platformType:{
+    type: String,
+    default: 'web'
+  },
   token: { type: String, required: true },
   createdAt: { type: Date, default: Date.now, expires: '30d' }, // Token expires after 30 days
 });
 
 const Token = mongoose.model('Token', tokenSchema);
+
+
+// Define Chat Room and Message schemas
+const chatRoomSchema = new mongoose.Schema({
+  name: String,
+  description: String,
+  isGroup: { type: Boolean, default: false }, // Indicates if it's a group chat
+  allowedParticipants: [String], // User IDs of allowed participants
+  purpose: {
+    type: String,
+    default: 'General Chat',
+  },
+  purposeReference: String,
+  createdAt: { type: Date, default: Date.now },
+});
+
+const messageSchema = new mongoose.Schema({
+  roomId: String,
+  userId: String,
+  text: String,
+  createdAt: { type: Date, default: Date.now },
+});
+
+const ChatRoom = mongoose.model('ChatRoom', chatRoomSchema);
+const Message = mongoose.model('Message', messageSchema);
+
 
 // Example route to send a message to a topic
 // app.post('/send-notification', async (req, res) => {
@@ -58,37 +87,68 @@ const Token = mongoose.model('Token', tokenSchema);
 
 // Endpoint to send notifications
 app.post('/send-notification', async (req, res) => {
-    const { userId, title, body } = req.body;
-  
-    try {
+  const { userId, title, body } = req.body;
+
+  try {
       const tokenDoc = await Token.findOne({ userId });
       if (!tokenDoc) {
-        return res.status(404).send('No token found for user');
+          return res.status(404).send('No token found for user');
       }
-  
+      console.log(`Sending notification to token: ${tokenDoc.token}`);
+      
+      // Prepare the message
       const message = {
-        notification: {
-          title: title,
-          body: body,
-        },
-        token: tokenDoc.token,
-        data:{
-          title:title,
-          icon: "https://www.svgrepo.com/show/31480/notification-bell.svg", // Custom icon URL for web
-          url: "http://localhost:3006"
-        }
+          topic: tokenDoc.token,
+          notification: {
+              title: title,
+              body: body,
+          },
+          data: {
+              title: title,
+              icon: "https://www.svgrepo.com/show/31480/notification-bell.svg", // Custom icon URL for web
+              url: "http://localhost:3006"
+          }
       };
 
-      publishMessage('receive_message',message);
+      // Send the notification using Firebase Cloud Messaging
+      await admin.messaging().send(message);
+      // Wait for all notifications to be sent
+      res.status(200).send('Notifications sent successfully');
+  } catch (error) {
+      console.error('Error sending notifications:', error);
+      res.status(500).send('Error sending notifications');
+  }
+});
+
+app.post('/send-notification-to-topic', async (req, res) => {
+  const { userId, title, body,topic } = req.body;
+  console.log(req.body);
   
-      const response = await admin.messaging().send(message);
-      console.log('Notification sent successfully:', response);
-      res.status(200).send('Notification sent successfully');
-    } catch (error) {
-      console.error('Error sending notification:', error);
-      res.status(500).send('Error sending notification');
-    }
-  });
+  try {
+      // Prepare the message
+      const message = {
+          notification: {
+              title: title,
+              body: body,
+          },
+          data: {
+              title: title,
+              icon: "https://www.svgrepo.com/show/31480/notification-bell.svg", // Custom icon URL for web
+              url: "http://localhost:3006",
+              topic: topic
+          },
+          topic:topic
+      };
+
+      // Send the notification using Firebase Cloud Messaging
+      await admin.messaging().send(message);
+      // Wait for all notifications to be sent
+      res.status(200).send('Notifications sent successfully');
+  } catch (error) {
+      console.error('Error sending notifications:', error);
+      res.status(500).send('Error sending notifications');
+  }
+});
 
 app.get('/', (req, res) => {
     res.send('Hello, World!');
@@ -115,8 +175,14 @@ app.post('/register-token', async (req, res) => {
     }
   
     try {
+      const topic = `notification-topic-${userId}`;
+      await admin.messaging().subscribeToTopic(token, topic);
       // Upsert token (update if exists, insert if not)
-      await Token.findOneAndUpdate({ userId }, { token }, { upsert: true, new: true });
+      await Token.updateOne(
+        { userId },
+        { token: topic }, // Use $addToSet to avoid duplicates
+        { upsert: true }
+      );
       console.log('Token registered for user:', userId);
       res.status(200).send('Token registered successfully');
     } catch (error) {
@@ -139,7 +205,40 @@ app.post('/delete-token', async (req, res) => {
     }
   });
 
+
+// Endpoint to send a message
+app.post('/send-message', async (req, res) => {
+  try {
+    const { roomId, content, userId,replyTo } = req.body;
+    const messagesRef = db.ref(roomId);
+    const newMessageRef = messagesRef.push();
+    // Push the new message to the database
+    const avatars = [
+      "https://png.pngtree.com/png-vector/20230903/ourmid/pngtree-man-avatar-isolated-png-image_9935819.png",
+      "https://img.freepik.com/free-vector/smiling-redhaired-cartoon-boy_1308-174709.jpg",
+      "https://images.vexels.com/media/users/3/145922/raw/eb6591b54b2b6462b4c22ec1fc4c36ea-female-avatar-maker.jpg"
+  ];
+  const randomAvatar = avatars[Math.floor(Math.random() * avatars.length)];
+
+    await newMessageRef.set({
+      text: content,
+      replyTo,
+      sender: {
+        id: userId,
+        name: `Mr. ${userId}`, // Update with dynamic user name
+        avatar: randomAvatar // Update with dynamic user avatar
+        },
+      timestamp: admin.database.ServerValue.TIMESTAMP,
+    });
+    // Trigger a notification to the other user in the chat room
+    return newMessageRef.key;
+  } catch (error) {
+    res.status(500).send('Error sending message: ' + error.message);
+  }
+});
+
+
 // Start the server
-app.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
+app.listen(PORT,'192.168.1.18', () => {
+    console.log(`Server is running on http://192.168.1.18:${PORT}`);
 });

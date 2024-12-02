@@ -38,7 +38,7 @@ export const NotificationProvider = ({ children }) => {
                 setToken(token);
                 console.log('FCM Token:', token);
                 // Send token to your server for registration
-                await fetch('http://localhost:3010/register-token', {
+                await fetch('http://192.168.1.18:3010/register-token', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -101,8 +101,23 @@ export const NotificationProvider = ({ children }) => {
         }
     };
 
+    const subscribeToTopic = async (topic,token) => {
+        try {
+            await fetch('http://192.168.1.18:3010/subscribe', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ topic, token }), // Replace USER_ID with actual user ID
+            });
+            console.log('Successfully subscribed to topic:', topic);
+        } catch (error) {
+            console.error('Error subscribing to topic:', error);
+        }
+    };
+
     return (
-        <NotificationContext.Provider value={{ token, error, notification , deleteNotificationToken }}>
+        <NotificationContext.Provider value={{ token, error, notification , deleteNotificationToken,subscribeToTopic }}>
             {children}
         </NotificationContext.Provider>
     );
